@@ -1,0 +1,170 @@
+---
+title: "Assignment 3 ST464/ST684"
+author: "Elizabeth O'Dwyer 21253265"
+date: "`r format(Sys.time(), '%X %d %B, %Y')`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=4, fig.height=4)
+```
+
+
+
+
+
+#### Question 2
+
+
+
+```{r, eval=T} 
+#install.packages("mlbench") # first time only
+suppressMessages(library(mlbench) )
+library(ggplot2)
+library(class)
+library(MASS)
+data(PimaIndiansDiabetes2)
+d <- na.omit(PimaIndiansDiabetes2)
+set.seed(2)
+s <- sample(nrow(d), round(.6*nrow(d)))
+dtrain <- d[s,]
+dtest<- d[-s,]
+```
+
+(a) Plot the variables age and glucose using colour to show the
+two levels of diabetes for the training set.
+```{r}
+b <- ggplot(dtrain, aes(x = age, y = glucose,col=diabetes))
+b + geom_point()
+```
+
+
+(b) Perform a logistic regression analysis  to predict diabetes, using variables age and glucose, on the training set.
+Use a plot to show the logistic classification boundaries and the training data. What is the test error of the model obtained?
+```{r}
+l_r <- glm(diabetes ~ age + glucose, family = "binomial", data = dtrain)
+
+#Need to use a grid to generate x, y values to plot the
+#data smoothly.
+grid <- expand.grid(age =seq(min(dtrain$age), max(dtrain$age), length=235),
+glucose = seq(min(dtrain$glucose), max(dtrain$glucose), length=235) )
+#Logistic Regression on the grid in order to show the 
+#classification boundaries
+grid$lr <- predict(l_r, grid, type="response")
+
+
+ggplot(data=dtrain, aes(x=age, y=glucose)) +
+geom_point(aes(color=diabetes),alpha=.5)+
+geom_contour(data=grid,aes(z=lr),breaks=0.3, color="black")
+
+#Computing the test error.
+prob_lr <- predict(l_r, dtest, type="response")
+#Using a threshold of 0.3 for a positive result, it seems to fit the data best according to the plot.
+pred_lr <- factor(ifelse(prob_lr < 0.3, "neg", "pos"))
+#confus_lr<- table(dtest$diabetes, pred_lr)
+error_lr <- mean(pred_lr != dtest$diabetes)
+print(error_lr)
+```
+
+
+
+(c) Perform a linear discriminant analysis  to predict mpg01, using variables age and glucose, on the training set.
+Use a plot to show the discriminant boundaries and the training data. What is the test error of the model obtained?
+```{r}
+
+l_d_a <- lda(diabetes~age+glucose,data=dtrain)
+
+grid$lda <- predict(l_d_a, grid)$posterior[,'pos']
+
+ggplot(data=dtrain, aes(x=age, y=glucose)) +
+geom_point(aes(color=diabetes),alpha=.5)+
+geom_contour(data=grid, aes(z=lda),breaks=0.3, color="black")
+
+
+#Computing the test error again using a theshold of 0.3.
+prob_lda <- predict(l_d_a, dtest,type="response")$posterior[,'pos']
+pred_lda <- factor(ifelse(prob_lda < 0.3, "neg", "pos"))
+#confus_lr<- table(dtest$diabetes, pred_lda)
+error_lda <- mean(pred_lda != dtest$diabetes)
+print(error_lda)
+```
+
+
+
+
+(d) Repeat (b) using quadratic discriminant analysis.
+Which is better, logistic, LDA or QDA?
+```{r}
+q_d_a <- qda(diabetes ~ age+glucose,data=dtrain)
+
+
+grid$qda <- predict(q_d_a, grid)$class
+
+
+ggplot(data=dtrain, aes(x=age, y=glucose)) +
+geom_point(aes(color=diabetes),alpha=.5)+
+geom_point(data=grid, aes(color=qda),size=.1,alpha=0.1)
+
+test_qda <- predict(q_d_a, dtest)$class
+error_qda <- mean(test_qda != dtest$diabetes)
+print(error_qda)
+
+#QDA produces the smallest test error rate, so its a better fit overall.
+#The plot also seems to encapsulate the data well.
+```
+
+
+
+(e) Perform KNN with response of diabetes, and the same two predictors. Remember to scale the predictors for the training
+set, and apply this scaling to the test set.
+Use $k=5$ and $k=30$. Which value of $k$
+gives the best result on the test set?
+```{r}
+
+knn_train <- scale(dtrain[c('age', 'glucose')])
+knn_test <- dtest[c('age', 'glucose')]
+
+
+means <- attr(knn_train,"scaled:center")
+sds<- attr(knn_train,"scaled:scale")
+knn_test = scale(knn_test,center=means, scale=sds)
+
+
+knn_5 <- knn(train = knn_train, test = knn_test,cl= dtrain$diabetes, k=5)
+
+
+knn_30 <- knn(train = knn_train, test = knn_test,cl = dtrain$diabetes, k=30)
+
+
+error_knn5<- mean(knn_5 != dtest$diabetes)
+
+
+error_knn30 <- mean(knn_30 != dtest$diabetes)
+
+print(error_knn5)
+print(error_knn30)
+#The test error is lower for k=30.
+```
+
+
+(f) For the better value of $k$ plot the training data and the classification boundaries from knn.
+Which classification algorithm would you recommend here based on your findings?
+```{r}
+grid_knn <-expand.grid(age =seq(min(dtrain$age), max(dtrain$age), length=235),
+glucose = seq(min(dtrain$glucose), max(dtrain$glucose), length=235) )
+scaled_grid <- scale(grid_knn, center=means, scale=sds)
+
+
+knn_pred <- knn(train = knn_train, test = scaled_grid,cl = dtrain$diabetes, k=30)
+grid_knn$knn <- knn_pred
+
+ggplot(data=dtrain, aes(x=age, y=glucose, color=diabetes))+
+geom_point(alpha=.5)+
+geom_point(data=grid_knn,aes(color=knn),alpha=.01)
+
+#The test error is lowest for knn, the classification boundaries for the training data also is a better fit than the other models.
+
+#I would recommened knn with k=30.
+```

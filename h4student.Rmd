@@ -1,0 +1,169 @@
+---
+title: "Assignment 4 ST464/ST644"
+author: "Elizabeth O'Dwyer 21253265"
+date: "`r format(Sys.time(), '%X %d %B, %Y')`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=4, fig.height=4)
+```
+
+
+```{r, eval=T, echo=FALSE}
+suppressMessages(library(MASS))
+suppressMessages(library(gam))
+suppressMessages(library(splines))
+suppressMessages(library(tree))
+suppressMessages(library(randomForest))
+```
+
+
+
+
+
+
+
+
+
+#### Question 3
+Using the Boston data, with nox as the response and predictors black, age and dis.
+
+
+
+
+(a)Using a seed of 1, split the data into training 60% and test 40%. Using the training
+data, fit a generalised additive model (GAM). Use ns with 4 degrees of freedom for
+each predictor. Calculate the MSE on the training and test data.
+```{r}
+#Retrieve Data and separate test and train.
+set.seed(1)
+s <- sample(nrow(Boston), round(.6*nrow(Boston)))
+Boston1 <- Boston[s,] # train
+Boston2 <- Boston[-s,] # test
+
+###########Fitting GAM model.###########
+
+#Training Data
+GAM_fit <- lm(nox ~ ns(black,4)+ ns(age,4) +ns(dis,4), data=Boston1)
+
+#Predict on Test Data.
+test_fit = predict(GAM_fit, Boston2)
+
+#MSE.
+GAM_tr_error=mean(GAM_fit$residuals^2)
+GAM_tst_error = mean((test_fit-Boston2$nox)^2)
+```
+
+
+(b)Use plot.Gam to display the results. Does it appear if a linear term is appropriate
+for any of the predictors?
+```{r}
+#Plot the fit
+par(mar=c(4, 4, 1, 1))
+par(mfrow = c(3, 1))
+plot.Gam(GAM_fit, terms='ns(black, 4)',xlab='black',ylab='ns(black, 4)')
+plot.Gam(GAM_fit, terms='ns(age, 4)')
+plot.Gam(GAM_fit, terms='ns(dis, 4)')
+par(mfrow = c(1, 1)) #reset this parameter
+
+#The plot of age vs ns(age, 4) is approximately linear if you ignore the bump in the middle.
+#A linear term could be appropriate for this variable.
+```
+
+
+
+
+(c)Simplify the model fit in part (a), using just two df per term. Refit the model. Use
+anova to compare the two fits and comment on your results.
+```{r}
+#Simplified GAM fit.
+GAM_fit_2df <- lm(nox ~ ns(black,2)+ ns(age,2) +ns(dis,2), data=Boston1)
+
+#Compare fits
+#We can use anova to test our null Hypotheses.
+#Ho = the model needs the extra terms
+#H1 = the model does not need the extra terms.
+
+anova(GAM_fit_2df,GAM_fit)
+#We have a p value of 0.179, which >>0.001, which is not statistically significant.
+#The increased number of predictors does not improve the model significantly.
+```
+
+
+
+
+
+#### Question 5
+
+
+
+
+
+(a)For the training data in question 3, fit a tree model. Draw the tree. Calculate the
+training and test MSE.
+```{r}
+tree_fit <- tree(nox ~ black+ age +dis, data=Boston1)
+
+#Plot of Tree Fit.
+par(mar=c(1, 1, 1, 1))
+plot(tree_fit)
+text(tree_fit, cex=.5, pretty=0)
+
+
+#MSE.
+#predictions from the tree
+predTrain <- predict(tree_fit, Boston1) # 
+#training error
+tree_tr_error<- mean((predTrain - Boston1$nox)^2) 
+#Predict on Test Data.
+test_treefit = predict(tree_fit, Boston2)
+#Error on test data.
+tree_tst_error <- mean((test_treefit-Boston2$nox)^2)
+```
+
+
+(b)Use cv.tree to select a pruned tree. If pruning is required, fit and draw the pruned
+tree. Calculate the training and test MSE. Compare the results to those in (a).
+```{r}
+cvtree <- cv.tree(tree_fit)
+
+w <- which.min(cvtree$dev)
+print(cvtree$size[w])
+#The number of nodes with the lowest least square residuals is 6, which is the same as the full tree.
+#So pruning is not required.
+```
+
+
+
+
+(c)Now fit a randomForest. Calculate the training and test MSE.
+```{r}
+rf <- randomForest(nox ~ black+ age +dis, data=Boston1, importance=TRUE)
+
+#Predict on Train Data.
+train_rffit = predict(rf, Boston1)
+
+
+#Predict on Test Data.
+test_rffit = predict(rf, Boston2)
+
+#MSE.
+rf_tr_error=mean((train_rffit-Boston1$nox)^2)
+rf_tst_error = mean((test_rffit-Boston2$nox)^2)
+```
+
+(d)Which fit is better, random forest, the (optionally pruned) tree or the GAM? Compare
+their performance on the test data.
+```{r}
+tab <- matrix(c(GAM_tr_error, tree_tr_error, rf_tr_error, GAM_tst_error, tree_tst_error, rf_tst_error), ncol=2)
+rownames(tab) <- c('GAM','Tree','RandomForest')
+colnames(tab) <- c('Train', 'Test')
+tab <- as.table(tab)
+#From the table we can see that the Random Forest fit has the lowest Train error. The GAM fit however has the lowest test error.
+
+#I would be inclined to say that the GAM fit is best due to the fact that there is smallest discrepancy between train and test error, as well as having the lowest test error, indicating that the model generalises better.
+tab
+```

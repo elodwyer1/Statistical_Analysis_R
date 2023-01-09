@@ -1,0 +1,203 @@
+---
+title: "Assignment 2 ST464/ST644"
+author: "Elizabeth O'Dwyer 21253265"
+date: "`r format(Sys.time(), '%X %d %B, %Y')`"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=4, fig.height=4)
+```
+
+
+```{r, eval=T} 
+# once only install packages.
+# skip this step on the server
+
+#install.packages("ISLR")
+#install.packages("rgl")
+#install.packages("factoextra")
+#install.packages('ggfortify)
+library(rgl)
+setupKnitr(autoprint=TRUE)
+```
+
+
+
+#### Question 1
+
+
+```{r} 
+morpho <- read.csv(here::here("hwk", "Data", "morpho.csv"))
+morpho$sport<- as.factor(morpho$sport)
+```
+
+(a)
+```{r}
+library(GGally)
+ggpairs(morpho, aes(color = sport), columns = 1:5,upper = list(continuous = wrap("cor", size = 2)),lower = list(continuous = wrap("points",size=0.5)))
+
+#We see an outlier in the height vs arm plot, for the sport 'voll'. 
+#There is also an outlier in the bhd vs arm plot for the sport 'voll'.
+#There is also an outlier in the bhd vs weight for the sport 'hand'.
+```
+
+
+(b)
+```{r}
+sapply(morpho[,1:5], var)
+#The variables are rescaled since the standard deviation of each differs drastically.
+p<- prcomp(morpho[,1:5],scale=TRUE, retx=T)
+prcnt_pc1 <- 100 * p$sdev[1]/sum(p$sdev)
+prcnt_pc1pc2 <- prcnt_pc1 + 100 * p$sdev[2]/sum(p$sdev)
+ans1 <- paste(c('Percentage of the variability in the dataset accounted for by the first component is: ', prcnt_pc1),collapse = " ")
+print(ans1)
+ans2 <- paste(c('Percentage of the variability in the dataset accounted for by the first two components is: ', prcnt_pc1pc2),collapse = " ")
+print(ans2)
+
+
+source('~/ST464/hwk/screeplot.R')
+par(mar=c(1, 1, 1, 1))
+sc_p<- screeplot1(p)
+#We can see from the scree plot that the first component accounts for a huge proportion of the dataset. The subsequent components each contribute similar amounts.
+```
+
+
+
+(c)
+```{r}
+p$rotation[,1:2]
+#PC1 is mostly a measure of height, followed by hbd, arm and weight contributing similar proportions. Each value is positive so high values of height, bhd, arm and weight will mean a high score.
+#PC2 is mostly a measure of bia. It has a different direction (negative) to the other components. It is high magnitude, in the negative direction. This means that high values of bia will result in a low score. Weight is also a negative contribution to PC2. Meaning that low weight results in a high score and vice versa.
+biplot(p,cex=c(.5,.5), cex.axis=.5)
+#Values in the biplot are centered in the middle of the plot, there is low density in the outer corners of each quadrant. 
+#Our results from the rotation parameter are confirmed.
+#bhd, arm, and height behave very similarly. High PC1 values and low,positive PC2 values. Weight is also high PC1 with low, negative PC2.
+#bia has high, negative PC2 with low,positive PC1.
+#94, 91 and 114 are outliers.
+```
+
+
+
+
+(d)
+```{r} 
+raw <- as.data.frame(p$x[,1:2])
+sports=morpho$sport
+raw$sport = sports
+
+plot(raw[,1], raw[,2], col=raw$sport, pch=20)
+legend("bottomright", fill = unique(raw$sport), legend = c( levels(raw$sport)))
+
+#I do not see particular clustering between sports.
+#Perhaps 'judo', the blue variable, is clustered the most out of all sports.
+```
+
+
+
+#### Question 3
+
+
+(a)
+```{r, fig.width=3, fig.height=3, fig.show='hold'}
+library(ISLR)
+library(ggplot2)
+Auto <-Auto[complete.cases(Auto[,c(1,4,5)]),] # to remove NAs
+#In this plot we see that mpg decreases as weight increases. Although it is clearly not linear. To me it looks like an exponential relationship on first glance.
+ggplot(data=Auto, aes(x=weight, y=mpg))+ geom_point()
+
+#In this plot we see that mpg decreases as horsepower increases. Although it is clearly not linear. To me it looks like an exponential relationship on first glance.
+ggplot(data=Auto, aes(x=horsepower, y=mpg))+ geom_point()
+
+#
+```
+
+
+(b)
+```{r}
+
+
+with(Auto, plot3d(weight,horsepower,mpg, col="blue",theta=0, phi=20))
+#We see a clear relationship between mpg and the predictors.
+#We see peak mpg for minimum weight/horsepower values which then decrease steeply.
+```
+
+
+
+(c)
+```{r}
+set.seed(123)
+train <- sample(nrow(Auto), round(.8*nrow(Auto)))
+AutoTrain <- Auto[train,]
+AutoTest <- Auto[-train,]
+f1 <- lm(mpg~weight+horsepower, data=AutoTrain)
+summary(f1)
+#We see a p value of 2.2e-16, which is much less than 0.05. Thus we can confirm a relationship between variables.
+```
+
+
+
+
+(d)
+```{r} 
+wt1 <- seq(1610 ,5140, length.out = 30)
+hp1 <- seq(45, 230, length.out = 30)
+pred1 <- predict(f1, expand.grid(weight=wt1, horsepower=hp1))
+pred1 <- matrix(pred1,30,30)
+
+with(AutoTrain, plot3d(weight,horsepower, mpg,col="blue",theta=0, phi=20))
+surface3d(wt1, hp1,pred1, alpha=.2)
+
+
+#The curve underfits the data, it is not a very good fit.
+
+```
+
+(e)
+```{r} 
+f2 <- loess(mpg~weight+horsepower, data=AutoTrain)
+wt2 <- seq(1610 ,5140, length.out = 30)
+hp2 <- seq(45, 230, length.out = 30)
+pred2 <- predict(f2, expand.grid(weight=wt2, horsepower=hp2))
+pred2 <- matrix(pred2,30,30)
+
+with(AutoTrain, plot3d(weight,horsepower, mpg,col="blue",theta=0, phi=20))
+surface3d(wt2, hp2,pred2, alpha=.2)
+
+#The loess is a better fit, however it seems to overfit the data. We see two peaks. The first mimics the data well and the second peak appears with no data points to support it. We also see a major trough, that does not follow the data points.
+```
+
+(f)
+```{r}
+y1=f1$fitted.values#
+mse_1 <- mean((y1-AutoTrain$mpg)^2)
+
+
+y2=f2$fitted
+mse_2 <- mean((y2-AutoTrain$mpg)^2)
+
+ans1 <- paste(c('MSE for Linear: ', mse_1),collapse = " ")
+print(ans1)
+ans2 <- paste(c('MSE for Polynomial: ', mse_2),collapse = " ")
+print(ans2)
+#The MSE is lower for the polynomial fit than the linear.
+```
+
+(g)
+```{r}
+test_x = AutoTest[,c(4,5)]
+yTestHat1 = predict(f1, test_x)
+mse_test1 <- mean((yTestHat1-AutoTest$mpg)^2)
+
+yTestHat2 = predict(f2, test_x)
+mse_test2 <- mean((yTestHat2-AutoTest$mpg)^2)
+
+ans1 <- paste(c('MSE for Linear on Test Data: ', mse_test1),collapse = " ")
+print(ans1)
+ans2 <- paste(c('MSE for Polynomial on Test Data: ', mse_test2),collapse = " ")
+print(ans2)
+
+#We see similar MSE for the training and test data. Slightly lower MSE for the test data on the linear fit than the training.
+```
